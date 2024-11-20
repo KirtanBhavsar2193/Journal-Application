@@ -1,0 +1,18 @@
+#spring.data.mongodb.host=localhost
+#spring.data.mongodb.port=27017
+#spring.data.mongodb.database=journal_Auth
+#spring.data.mongodb.username=myName
+#spring.data.mongodb.password=myPassword
+spring:
+  application:
+    name: JournalProjectApp
+  data:
+    mongodb:
+      host: localhost
+      port: 27017
+      database: journal_auth
+      auto-index-creation: true
+
+
+server:
+  port: 8080

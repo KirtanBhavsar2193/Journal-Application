@@ -1,0 +1,7 @@
+24-11-20 16:45:16.863 [http-nio-8080-exec-2] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet' 
+24-11-20 16:45:16.866 [http-nio-8080-exec-2] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet' 
+24-11-20 16:45:16.869 [http-nio-8080-exec-2] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 1 ms 
+24-11-20 16:45:17.383 [http-nio-8080-exec-2] ERROR c.s.j.service.UserService - hahahahahaha 
+24-11-20 16:45:17.383 [http-nio-8080-exec-2] INFO  c.s.j.service.UserService - hahahahahaha 
+24-11-20 16:45:17.383 [http-nio-8080-exec-2] WARN  c.s.j.service.UserService - hahahahahaha 
+24-11-20 16:45:17.383 [http-nio-8080-exec-2] DEBUG c.s.j.service.UserService - hahahahahaha 

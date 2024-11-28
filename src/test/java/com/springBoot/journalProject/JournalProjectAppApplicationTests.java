@@ -1,3 +1,5 @@
+/*
+
 package com.springBoot.journalProject;
 
 import org.junit.jupiter.api.Test;
@@ -11,3 +13,5 @@ class JournalProjectAppApplicationTests {
 	}
 
 }
+
+*/

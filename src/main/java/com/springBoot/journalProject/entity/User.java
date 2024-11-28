@@ -22,11 +22,29 @@ public class User
     @Indexed(unique = true)
     @NonNull
     private String userName;
+    private String email;
+    private boolean sentimentAnalysis;
     @NonNull
     private String password;
     @DBRef
-    private List<JournalEntry> entry = new ArrayList<>();
+    private List<PostEntry> entry = new ArrayList<>();
     private List<String> roles;
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public void setSentimentAnalysis(boolean sentimentAnalysis) {
+        this.sentimentAnalysis = sentimentAnalysis;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public boolean isSentimentAnalysis() {
+        return sentimentAnalysis;
+    }
 
     public ObjectId getId()
     {
@@ -43,7 +61,7 @@ public class User
         return password;
     }
 
-    public List<JournalEntry> getEntry()
+    public List<PostEntry> getEntry()
     {
         return entry;
     }
@@ -68,7 +86,7 @@ public class User
         this.password = password;
     }
 
-    public void setEntry(List<JournalEntry> entry)
+    public void setEntry(List<PostEntry> entry)
     {
         this.entry = entry;
     }
@@ -77,5 +95,5 @@ public class User
     {
         this.roles = roles;
     }
-}
 
+}

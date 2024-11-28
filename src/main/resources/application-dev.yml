@@ -6,6 +6,9 @@
 spring:
   application:
     name: JournalProjectApp
+#  redis:
+#    host: localhost
+#    port: 6379
   data:
     mongodb:
       database: journal_Auth  # Match the exact case of your database name

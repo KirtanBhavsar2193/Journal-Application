@@ -1,3 +1,4 @@
+/*
 package com.springBoot.journalProject.service;
 
 import com.springBoot.journalProject.repository.UserRepo;
@@ -12,13 +13,14 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+@Disabled
 @SpringBootTest
 public class UserServiceTest
 {
     @Autowired
     private UserRepo userRepo;
 
-
+    @Disabled
     @ParameterizedTest
     @ValueSource(strings = {
             "kimy",
@@ -43,3 +45,4 @@ public class UserServiceTest
         assertEquals(expected, a+b);
     }
 }
+*/

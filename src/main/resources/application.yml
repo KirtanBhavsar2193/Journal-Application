@@ -1,10 +1,32 @@
 spring:
   profiles:
     active: dev
-
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: kimybh44@gmail.com
+    password: jcnc vghx hypt idf
+    protocol: smtp
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enabled: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
 logging:
   level:
     com:
       springBoot:
         journalProject: DEBUG
+    org:
+      springframework:
+        mail: DEBUG
+
+weather:
+  api:
+    key: 4d4102c99db7e621f55df1b348c19842

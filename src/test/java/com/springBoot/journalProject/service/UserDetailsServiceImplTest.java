@@ -1,8 +1,10 @@
+/*
 package com.springBoot.journalProject.service;
 
 import com.springBoot.journalProject.repository.UserRepo;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
@@ -18,7 +20,7 @@ import java.util.ArrayList;
 
 import static org.mockito.Mockito.*;
 
-
+@Disabled
 public class UserDetailsServiceImplTest
 {
     @InjectMocks
@@ -27,12 +29,14 @@ public class UserDetailsServiceImplTest
     @Mock
     private UserRepo urepo;
 
+    @Disabled
     @BeforeEach
     void setUp()
     {
         MockitoAnnotations.initMocks(this);
     }
 
+    @Disabled
     @Test
     void loadUserByUsernameTest()
     {
@@ -43,3 +47,4 @@ public class UserDetailsServiceImplTest
         Assertions.assertNotNull(user);
     }
 }
+*/

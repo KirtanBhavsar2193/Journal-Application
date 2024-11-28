@@ -1,6 +1,6 @@
 package com.springBoot.journalProject.controller;
 
-import com.springBoot.journalProject.entity.JournalEntry;
+import com.springBoot.journalProject.entity.PostEntry;
 import com.springBoot.journalProject.entity.User;
 import com.springBoot.journalProject.service.EntryService;
 import com.springBoot.journalProject.service.UserService;
@@ -31,7 +31,7 @@ public class EntryControllerV2
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String userName = authentication.getName();
         User user = uservice.findByUserName(userName);
-        List<JournalEntry> all = user.getEntry() ;
+        List<PostEntry> all = user.getEntry() ;
         if (all != null && !all.isEmpty())
         {
             return new ResponseEntity<>(all, HttpStatus.OK);
@@ -41,7 +41,7 @@ public class EntryControllerV2
 
 
     @PostMapping
-    public ResponseEntity<JournalEntry> cerate(@RequestBody JournalEntry entry)
+    public ResponseEntity<PostEntry> cerate(@RequestBody PostEntry entry)
     {
         try
         {
@@ -52,15 +52,18 @@ public class EntryControllerV2
         }
         catch (Exception e)
         {
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+//            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            System.out.println("Some problem to save post "+e.getMessage());
+            e.printStackTrace();
+            return null;
         }
     }
 
 
     @GetMapping("id/{id}")
-    public ResponseEntity<JournalEntry> getdata(@PathVariable ObjectId id)
+    public ResponseEntity<PostEntry> getdata(@PathVariable ObjectId id)
     {
-        Optional<JournalEntry> allEntry = es.findById(id);
+        Optional<PostEntry> allEntry = es.findById(id);
         if (allEntry.isPresent())
         {
             return new ResponseEntity<>(allEntry.get(), HttpStatus.OK);
@@ -78,9 +81,9 @@ public class EntryControllerV2
 
 
     @PutMapping("id/{userName}/{id}")
-    public ResponseEntity<?> update(@PathVariable ObjectId id, @RequestBody JournalEntry update, @PathVariable String userName)
+    public ResponseEntity<?> update(@PathVariable ObjectId id, @RequestBody PostEntry update, @PathVariable String userName)
     {
-        JournalEntry old = es.findById(id).orElse(null);
+        PostEntry old = es.findById(id).orElse(null);
         if (old != null)
         {
             old.setTitle(update.getTitle() != null && !update.getTitle().equals("") ? update.getTitle() : old.getTitle());

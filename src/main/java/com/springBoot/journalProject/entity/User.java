@@ -14,7 +14,9 @@ import java.util.List;
 //@Data
 //@Getter
 //@Setter
+@Builder
 @NoArgsConstructor
+@AllArgsConstructor
 public class User
 {
     @Id

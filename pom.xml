@@ -53,6 +53,10 @@
 			<version>4.11.4</version><!-- Use a version compatible with your MongoDB -->
 		</dependency>
 
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka</artifactId>
+		</dependency>
 
 		<dependency>
 			<groupId>org.projectlombok</groupId>

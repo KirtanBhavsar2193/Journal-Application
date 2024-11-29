@@ -6,7 +6,6 @@ import com.springBoot.journalProject.repository.PostEntryRepo;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -55,13 +54,21 @@ public class EntryService
         return postEntryRepo.findById(id);
     }
 
-    public void deleteById(ObjectId id, String userName)
+    public boolean deleteById(ObjectId id, String userName)
     {
-        User user = uservice.findByUserName(userName);
-        user.getEntry().removeIf(x -> x.getId().equals(id));
-        uservice.saveEntry(user);
-        postEntryRepo.deleteById(id);
+        boolean removed = false;
+        try {
+            User user = uservice.findByUserName(userName);
+            removed = user.getEntry().removeIf(x -> x.getId().equals(id));
+            if (removed) {
+                uservice.saveEntry(user);
+                postEntryRepo.deleteById(id);
+            }
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException("An error occurred while deleting the entry.", e);
+        }
+        return removed;
     }
-
-
 }

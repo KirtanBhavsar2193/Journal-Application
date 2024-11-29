@@ -52,10 +52,8 @@ public class EntryControllerV2
         }
         catch (Exception e)
         {
-//            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-            System.out.println("Some problem to save post "+e.getMessage());
-            e.printStackTrace();
-            return null;
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+
         }
     }
 
@@ -72,11 +70,16 @@ public class EntryControllerV2
     }
 
 
-    @DeleteMapping("id/{userName}/{id}")
-    public ResponseEntity<?> deletedata(@PathVariable ObjectId id, @PathVariable String userName)
-    {
-        es.deleteById(id, userName);
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    @DeleteMapping("id/{id}")
+    public ResponseEntity<?> deletedata(@PathVariable ObjectId id) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userName = authentication.getName();
+        boolean removed = es.deleteById(id, userName);
+        if (removed) {
+            return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        } else {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
     }
 
 

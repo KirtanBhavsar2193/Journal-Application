@@ -2,6 +2,7 @@ package com.springBoot.journalProject.service;
 
 import com.springBoot.journalProject.entity.User;
 import com.springBoot.journalProject.repository.UserRepo;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,10 +15,11 @@ import java.util.List;
 
 @Service
 //@Slf4j
+@RequiredArgsConstructor
 public class UserService
 {
-    @Autowired
-    private UserRepo urepo;
+
+    private final UserRepo urepo;
 
     private static final PasswordEncoder passEncoder = new BCryptPasswordEncoder();
 

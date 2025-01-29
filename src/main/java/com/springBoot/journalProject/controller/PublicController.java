@@ -4,7 +4,7 @@ import com.springBoot.journalProject.entity.User;
 import com.springBoot.journalProject.service.UserDetailsServiceImpl;
 import com.springBoot.journalProject.service.UserService;
 import com.springBoot.journalProject.utils.JwtUtils;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -12,19 +12,16 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+@RequiredArgsConstructor
 @RestController
 @RequestMapping("/public")
 public class PublicController
 {
-    @Autowired
-    private AuthenticationManager authenticationManager;
 
-    @Autowired
-    private JwtUtils jwtUtils;
-    @Autowired
-    private UserService uservice;
-    @Autowired
-    private UserDetailsServiceImpl userDetailsService;
+    private final AuthenticationManager authenticationManager;
+    private final JwtUtils jwtUtils;
+    private final UserService uservice;
+    private final UserDetailsServiceImpl userDetailsService;
 
 
     @GetMapping("/health")

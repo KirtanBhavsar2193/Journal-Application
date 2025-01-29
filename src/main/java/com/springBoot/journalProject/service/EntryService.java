@@ -3,21 +3,21 @@ package com.springBoot.journalProject.service;
 import com.springBoot.journalProject.entity.PostEntry;
 import com.springBoot.journalProject.entity.User;
 import com.springBoot.journalProject.repository.PostEntryRepo;
+import lombok.RequiredArgsConstructor;
 import org.bson.types.ObjectId;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+@RequiredArgsConstructor
 @Service
 public class EntryService
 {
-    @Autowired
-    private PostEntryRepo postEntryRepo;
-    @Autowired
-    private UserService uservice;
+
+    private final PostEntryRepo postEntryRepo;
+    private final UserService uservice;
 
 
     public void saveEntry(PostEntry postEntry, String userName)

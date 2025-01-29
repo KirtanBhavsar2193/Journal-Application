@@ -5,7 +5,7 @@ import com.springBoot.journalProject.entity.User;
 import com.springBoot.journalProject.repository.UserRepo;
 import com.springBoot.journalProject.service.UserService;
 import com.springBoot.journalProject.service.WeatherService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -14,17 +14,15 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-
+@RequiredArgsConstructor
 @RestController
 @RequestMapping("/user")
 public class UserController
 {
-    @Autowired
-    private UserService uservice;
-    @Autowired
-    private UserRepo urepo;
-    @Autowired
-    private WeatherService weatherService;
+
+    private final UserService uservice;
+    private final UserRepo urepo;
+    private final WeatherService weatherService;
 
 
     @GetMapping

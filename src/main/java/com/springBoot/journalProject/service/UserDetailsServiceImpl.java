@@ -2,18 +2,17 @@ package com.springBoot.journalProject.service;
 
 import com.springBoot.journalProject.entity.User;
 import com.springBoot.journalProject.repository.UserRepo;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 
+@RequiredArgsConstructor
 @Service
 public class UserDetailsServiceImpl implements UserDetailsService {
 
-    @Autowired
-    private UserRepo urepo;
+    private final UserRepo urepo;
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {

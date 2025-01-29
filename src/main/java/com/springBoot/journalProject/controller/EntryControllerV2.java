@@ -4,8 +4,8 @@ import com.springBoot.journalProject.entity.PostEntry;
 import com.springBoot.journalProject.entity.User;
 import com.springBoot.journalProject.service.EntryService;
 import com.springBoot.journalProject.service.UserService;
+import lombok.RequiredArgsConstructor;
 import org.bson.types.ObjectId;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -15,15 +15,15 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Optional;
 
+@RequiredArgsConstructor
 @RestController
 @RequestMapping("/journal")
 public class EntryControllerV2
 {
 
-    @Autowired
-    private EntryService es;
-    @Autowired
-    private UserService uservice;
+
+    private final EntryService es;
+    private final UserService uservice;
 
     @GetMapping
     public ResponseEntity<?> getallEntriesofUser()

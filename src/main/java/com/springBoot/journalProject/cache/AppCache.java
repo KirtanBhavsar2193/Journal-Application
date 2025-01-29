@@ -3,19 +3,19 @@ package com.springBoot.journalProject.cache;
 import com.springBoot.journalProject.entity.ConfigEntry;
 import com.springBoot.journalProject.repository.ConfigRepo;
 import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@RequiredArgsConstructor
 @Component
 public class AppCache
 {
 
-    @Autowired
-    private ConfigRepo configRepo;
+    private final ConfigRepo configRepo;
 
     public Map<String , String> APP_Cache = new HashMap<>();
 

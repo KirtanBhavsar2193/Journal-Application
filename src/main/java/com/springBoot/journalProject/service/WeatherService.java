@@ -2,18 +2,18 @@ package com.springBoot.journalProject.service;
 
 import com.springBoot.journalProject.api.response.WeatherResponse;
 import com.springBoot.journalProject.cache.AppCache;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Collections;
 import java.util.List;
 
+@RequiredArgsConstructor
 @Service
 public class WeatherService
 {
@@ -21,11 +21,8 @@ public class WeatherService
     private String apikey;
 //    private static final String API = "http://universities.hipolabs.com/search?country=COUN";
 
-    @Autowired
-    private RestTemplate restTemplate;
-
-    @Autowired
-    private AppCache appCache;
+    private final RestTemplate restTemplate;
+    private final AppCache appCache;
 
     public List<WeatherResponse> getWeather(String country)
     {

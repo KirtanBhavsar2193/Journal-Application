@@ -1,7 +1,7 @@
 package com.springBoot.journalProject.repository;
 
 import com.springBoot.journalProject.entity.User;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -9,12 +9,11 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+@RequiredArgsConstructor
 @Repository
 public class UserRepositoryImpl
 {
-
-    @Autowired
-    private MongoTemplate mongoTemplate;
+    private final MongoTemplate mongoTemplate;
 
     public List<User> getUserForSA()
     {

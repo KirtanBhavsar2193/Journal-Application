@@ -3,21 +3,21 @@ package com.springBoot.journalProject.controller;
 import com.springBoot.journalProject.cache.AppCache;
 import com.springBoot.journalProject.entity.User;
 import com.springBoot.journalProject.service.UserService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@RequiredArgsConstructor
 @RestController
 @RequestMapping("/admin")
 public class AdminController
 {
-    @Autowired
-    private UserService userservice;
-    @Autowired
-    private AppCache appCache;
+
+    private final UserService userservice;
+    private final AppCache appCache;
 
     @GetMapping("/all-user")
     public ResponseEntity<?> getAllUser()

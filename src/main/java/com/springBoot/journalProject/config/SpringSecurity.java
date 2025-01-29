@@ -1,7 +1,7 @@
 package com.springBoot.journalProject.config;
 
 import com.springBoot.journalProject.service.UserDetailsServiceImpl;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -15,12 +15,13 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
+@RequiredArgsConstructor
 @Configuration
 @EnableWebSecurity
 public class SpringSecurity {
 
-    @Autowired
-    private UserDetailsServiceImpl userDetailsService;
+
+    private final UserDetailsServiceImpl userDetailsService;
 
 //    @Autowired
 //    private PasswordEncoder passwordEncoder; // Inject PasswordEncoder here

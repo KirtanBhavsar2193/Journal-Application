@@ -17,5 +17,9 @@ spring:
       auto-index-creation: true
 
 
+uni:
+  client:
+    url: http://universities.hipolabs.com/
+
 server:
   port: 8080

@@ -27,6 +27,10 @@ logging:
       springframework:
         mail: DEBUG
 
+uni:
+  client:
+    url: ${UNI_CLIENT_URL}
+
 weather:
   api:
     key: 4d4102c99db7e621f55df1b348c19842

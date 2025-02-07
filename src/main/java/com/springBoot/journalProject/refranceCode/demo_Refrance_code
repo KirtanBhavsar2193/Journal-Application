@@ -1,0 +1,105 @@
+Personnel Repository
+================================================================================================================================
+@Repository
+public interface PersonnelRepository extends JpaRepository<Personnel, Long> {
+    @Query(value = "INSERT INTO personnel (first_name, last_name, gender, email, center) " +
+                   "VALUES (:firstName, :lastName, :gender, :email, :center) RETURNING personnel_id",
+           nativeQuery = true)
+    Long insertPersonnel(@Param("firstName") String firstName,
+                         @Param("lastName") String lastName,
+                         @Param("gender") String gender,
+                         @Param("email") String email,
+                         @Param("center") String center);
+}
+
+
+====================================================================================================================================
+Role Repository
+
+====================================================================================================================================
+@Repository
+public interface RoleRepository extends JpaRepository<Role, Long> {
+    @Query(value = "SELECT role_id FROM role WHERE name = :roleName", nativeQuery = true)
+    Optional<Long> findRoleIdByName(@Param("roleName") String roleName);
+
+    @Query(value = "INSERT INTO role (name) SELECT :roleName WHERE NOT EXISTS " +
+                   "(SELECT 1 FROM role WHERE name = :roleName) RETURNING role_id",
+           nativeQuery = true)
+    Optional<Long> insertRoleIfNotExists(@Param("roleName") String roleName);
+}
+
+
+->NOTE :- SELECT 1 only returns a single, minimal value (1) for matching rows, making it faster and more efficient.
+
+
+
+
+=====================================================================================================================================
+PersonnelRole Repository
+
+====================================================================================================================================
+@Repository
+public interface PersonnelRoleRepository extends JpaRepository<PersonnelRole, Long> {
+    @Modifying
+    @Query(value = "INSERT INTO personnel_role (personnel_id, role_id) VALUES (:personnelId, :roleId)",
+           nativeQuery = true)
+    void insertPersonnelRole(@Param("personnelId") Long personnelId, @Param("roleId") Long roleId);
+}
+
+
+
+==========================================================================================================================
+Service Layer
+
+==============================================================================================================================
+@Service
+@Transactional
+public class PersonnelService {
+    @Autowired
+    private PersonnelRepository personnelRepository;
+
+    @Autowired
+    private RoleRepository roleRepository;
+
+    @Autowired
+    private PersonnelRoleRepository personnelRoleRepository;
+
+    public void addPersonnel(String firstName, String lastName, String gender, String email, String center, String roleName) {
+        // Insert into personnel table
+        Long personnelId = personnelRepository.insertPersonnel(firstName, lastName, gender, email, center);
+
+        // Check and insert into role table
+        Long roleId = roleRepository.findRoleIdByName(roleName)
+                          .orElseGet(() -> roleRepository.insertRoleIfNotExists(roleName).orElseThrow(
+                              () -> new RuntimeException("Failed to insert or retrieve role")));
+
+        // Insert into personnel_role table
+        personnelRoleRepository.insertPersonnelRole(personnelId, roleId);
+    }
+}
+
+
+
+=================================================================================================================================
+Controller Layer
+
+=================================================================================================================================
+@RestController
+@RequestMapping("/personnel")
+public class PersonnelController {
+    @Autowired
+    private PersonnelService personnelService;
+
+    @PostMapping("/add")
+    public ResponseEntity<String> addPersonnel(@RequestBody PersonnelDTO personnelDTO) {
+        personnelService.addPersonnel(
+            personnelDTO.getFirstName(),
+            personnelDTO.getLastName(),
+            personnelDTO.getGender(),
+            personnelDTO.getEmail(),
+            personnelDTO.getCenter(),
+            personnelDTO.getRoleName()
+        );
+        return ResponseEntity.ok("Personnel added successfully");
+    }
+}

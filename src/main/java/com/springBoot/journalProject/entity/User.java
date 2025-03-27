@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Document(collection = "userinfo")
-//@Data
+@Data
 //@Getter
 //@Setter
 @Builder

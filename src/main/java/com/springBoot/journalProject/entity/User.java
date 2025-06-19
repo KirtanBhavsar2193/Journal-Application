@@ -32,7 +32,7 @@ public class User
     private List<PostEntry> entry = new ArrayList<>();
     private List<String> roles;
 
-    public void setEmail(String email) {
+   /* public void setEmail(String email) {
         this.email = email;
     }
 
@@ -96,6 +96,6 @@ public class User
     public void setRoles(List<String> roles)
     {
         this.roles = roles;
-    }
+    }*/
 
 }

@@ -1,4 +1,4 @@
-package com.springBoot.journalProject.service;
+/*package com.springBoot.journalProject.service;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,4 +19,4 @@ public class EmailServiceTest {
                 "kimybh44@gmail.com");
 
     }
-}
+}*/

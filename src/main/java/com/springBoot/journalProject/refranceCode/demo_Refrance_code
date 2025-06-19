@@ -1,105 +1,1063 @@
-Personnel Repository
-================================================================================================================================
-@Repository
-public interface PersonnelRepository extends JpaRepository<Personnel, Long> {
-    @Query(value = "INSERT INTO personnel (first_name, last_name, gender, email, center) " +
-                   "VALUES (:firstName, :lastName, :gender, :email, :center) RETURNING personnel_id",
-           nativeQuery = true)
-    Long insertPersonnel(@Param("firstName") String firstName,
-                         @Param("lastName") String lastName,
-                         @Param("gender") String gender,
-                         @Param("email") String email,
-                         @Param("center") String center);
-}
-
-
-====================================================================================================================================
-Role Repository
-
-====================================================================================================================================
-@Repository
-public interface RoleRepository extends JpaRepository<Role, Long> {
-    @Query(value = "SELECT role_id FROM role WHERE name = :roleName", nativeQuery = true)
-    Optional<Long> findRoleIdByName(@Param("roleName") String roleName);
-
-    @Query(value = "INSERT INTO role (name) SELECT :roleName WHERE NOT EXISTS " +
-                   "(SELECT 1 FROM role WHERE name = :roleName) RETURNING role_id",
-           nativeQuery = true)
-    Optional<Long> insertRoleIfNotExists(@Param("roleName") String roleName);
-}
-
-
-->NOTE :- SELECT 1 only returns a single, minimal value (1) for matching rows, making it faster and more efficient.
-
-
-
-
-=====================================================================================================================================
-PersonnelRole Repository
-
-====================================================================================================================================
-@Repository
-public interface PersonnelRoleRepository extends JpaRepository<PersonnelRole, Long> {
-    @Modifying
-    @Query(value = "INSERT INTO personnel_role (personnel_id, role_id) VALUES (:personnelId, :roleId)",
-           nativeQuery = true)
-    void insertPersonnelRole(@Param("personnelId") Long personnelId, @Param("roleId") Long roleId);
-}
-
-
-
-==========================================================================================================================
-Service Layer
-
-==============================================================================================================================
-@Service
-@Transactional
-public class PersonnelService {
-    @Autowired
-    private PersonnelRepository personnelRepository;
-
-    @Autowired
-    private RoleRepository roleRepository;
-
-    @Autowired
-    private PersonnelRoleRepository personnelRoleRepository;
-
-    public void addPersonnel(String firstName, String lastName, String gender, String email, String center, String roleName) {
-        // Insert into personnel table
-        Long personnelId = personnelRepository.insertPersonnel(firstName, lastName, gender, email, center);
-
-        // Check and insert into role table
-        Long roleId = roleRepository.findRoleIdByName(roleName)
-                          .orElseGet(() -> roleRepository.insertRoleIfNotExists(roleName).orElseThrow(
-                              () -> new RuntimeException("Failed to insert or retrieve role")));
-
-        // Insert into personnel_role table
-        personnelRoleRepository.insertPersonnelRole(personnelId, roleId);
-    }
-}
-
-
-
-=================================================================================================================================
-Controller Layer
-
-=================================================================================================================================
+------------------------------------------------------------------------------------------------------------------------
+Lookup Controller
+---------------------------------------------------------------------------------------------------------------------------
+@SuppressFBWarnings({"EI_EXPOSE_REP2"})
+@RequiredArgsConstructor
 @RestController
-@RequestMapping("/personnel")
-public class PersonnelController {
-    @Autowired
-    private PersonnelService personnelService;
+public class LookupController {
 
-    @PostMapping("/add")
-    public ResponseEntity<String> addPersonnel(@RequestBody PersonnelDTO personnelDTO) {
-        personnelService.addPersonnel(
-            personnelDTO.getFirstName(),
-            personnelDTO.getLastName(),
-            personnelDTO.getGender(),
-            personnelDTO.getEmail(),
-            personnelDTO.getCenter(),
-            personnelDTO.getRoleName()
-        );
-        return ResponseEntity.ok("Personnel added successfully");
+    private final LookupService lookupService;
+
+    @Operation(summary = "API end point fetch lookup list")
+    @GetMapping("/lookup")
+    @PreAuthorize("@authService.hasPermission(T(org.baps.api.vtms.enumerations.PermissionEnum).VIEW_LOOKUP)"
+           + "&& @siteService.siteExistsByUUCode(#siteUUCode)")
+    public ResponseEntity<List<LookupModel>> getAllLookups(
+            @RequestHeader(name = GeneralConstant.X_APP_SITE_UUCODE) final String siteUUCode) {
+        return ResponseEntity.ok(lookupService.getAllLookupList());
+    }
+
+    @Operation(summary = "API end point to update lookup")
+    @PutMapping("/lookup/{lookupId}")
+    @PreAuthorize("@authService.hasPermission(T(org.baps.api.vtms.enumerations.PermissionEnum).ADD_EDIT_LOOKUP)"
+             + "&& @siteService.siteExistsByUUCode(#siteUUCode)")
+    public ResponseEntity<LookupModel> updateLookup(
+                                    @RequestHeader(name = GeneralConstant.X_APP_SITE_UUCODE) final String siteUUCode,
+                                    @PathVariable final String lookupId,
+                                    @Valid @RequestBody final List<ChildLookupModel> childLookupModelList) {
+        return ResponseEntity.ok(lookupService.updateLookup(lookupId, childLookupModelList));
+    }
+
+}
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------------
+Lookup Service
+-------------------------------------------------------------------------------------------------------------------------------------
+	/**
+     * Retrieves all editable lookup entries from the database.
+     * This method operates in a read-only transactional context to ensure data consistency without modifying the database.
+     *
+     * @return A list of LookupModel entries where the editable flag is set to true.
+     */
+    @Transactional(readOnly = true)
+    public List<LookupModel> getAllLookupList() {
+        final List<Lookup> allLookups = lookupRepository.findByIsEditable(true);
+        return lookupMapper.lookupListToLookupModelList(allLookups);
+    }
+
+
+    /**
+     * Updates the child lookup entries of an existing lookup in the database based on the provided lookup ID.
+     * This method validates each child entry, assigns sequence numbers, and saves the updated data.
+     *
+     * @param lookupId The unique identifier of the lookup entry to be updated.
+     * @param childLookupModelList A list of child lookup entries to replace the existing entries.
+     * @return The updated LookupModel object after the changes have been saved.
+     * @throws DataValidationException If any child entry has a missing or empty key or value.
+     */
+    @Transactional
+    public LookupModel updateLookup(final String lookupId, final List<ChildLookupModel> childLookupModelList) {
+        final Lookup existingLookup = lookupRepository.findById(lookupId).orElseThrow(() ->
+                new DataNotFoundException("Lookup not found at : " + lookupId));
+
+        final boolean editable = existingLookup.isEditable();
+        if (!editable) {
+            throw new DataValidationException("Lookup can not be edited.");
+        }
+
+        childLookupModelList.stream().forEach(childLookup -> {
+            if (childLookup.getKey() == null || childLookup.getKey().equals("")) {
+                throw new DataValidationException("key is required");
+            }
+            if (childLookup.getValue() == null || childLookup.getValue().equals("")) {
+                throw new DataValidationException("value is required");
+            }
+        });
+
+        int sequenceCount = 0;
+        for (ChildLookupModel childLookup : childLookupModelList) {
+            sequenceCount++;
+            childLookup.setSequenceNumber(String.valueOf(sequenceCount));
+        }
+
+        existingLookup.setChildLookupModelList(childLookupModelList);
+        final Lookup updatedLookup = lookupRepository.save(existingLookup);
+        return lookupMapper.lookupToLookupModel(updatedLookup);
+    }
+
+/*if(CollectionUtils.isEmpty(existingChildLookupModelList)) {
+            childLookupModelList.forEach(childLookupModel -> {
+                int number = 0;
+                number++;
+                childLookupModel.setSequenceNumber(String.valueOf(number));
+            });
+            existingLookup.setChildLookupModelList(childLookupModelList);
+        }
+        else {
+            int sequenceCount = existingChildLookupModelList.stream().mapToInt(p ->
+                    Integer.parseInt(p.getSequenceNumber())).max().orElse(0);
+         }*/
+/*
+
+existingChildLookupModelList.add(childLookup);
+
+String sequenceNumber = childLookupModel.getSequenceNumber();
+
+int number = Integer.parseInt(sequenceNumber);
+number++;*/
+
+
+
+============================================================================================================================
+Requerment
+----------------------------------------------------
+
+-> add karti vakhte single child lookup add thse ke multipal as list ?
+-> API na ketla end point banava na che
+	like child lookup add vakhte - lookup/lookupId/childLookup, update vakhte - lookup/lookupId/childLookup/sequenceNumber and delete time same as update API end point ?
+-> is there any UI page or not ?
+
+
+=================================================================================================================================================
+Permission SQL Script
+==================================================================================================================================================
+
+permission
+------------------------------------------------------------------
+
+INSERT INTO public.permissions (permission_id, created_at, created_by, status, updated_at, updated_by, name) VALUES ('hvju68e9-be3c-4743-87ce-5d7305lmj75g', '2025-05-16 12:03:25.500714', 'AUTO', 'ACTIVE', '2025-05-16 12:03:25.500714', 'AUTO', 'VIEW_LOOKUP');
+
+INSERT INTO public.permissions (permission_id, created_at, created_by, status, updated_at, updated_by, name) VALUES ('648jhge9-be3c-4743-87ce-5d7305cyg165', '2025-05-16 12:03:25.500714', 'AUTO', 'ACTIVE', '2025-05-16 12:03:25.500714', 'AUTO', 'ADD_EDIT_LOOKUP');
+
+INSERT INTO public.permissions (permission_id, created_at, created_by, status, updated_at, updated_by, name) VALUES ('wea489e9-be3c-4743-87ce-5d7mkl563zdf', '2025-05-16 12:03:25.500714', 'AUTO', 'ACTIVE', '2025-05-16 12:03:25.500714', 'AUTO', 'DELETE_LOOKUP');
+
+
+role_permission
+---------------------------------------------------------------------------
+INSERT INTO public.role_permission (role_permission_id, created_at, created_by, status, updated_at, updated_by, permission_id, role_id) VALUES ('jn85d8e9-be3c-4743-87ce-5d7300e9fc54', '2025-05-16 12:03:25.500714', 'AUTO', 'ACTIVE', '2025-05-16 12:03:25.500714', 'AUTO', 'hvju68e9-be3c-4743-87ce-5d7305lmj75g', '5d66cf66-ba76-46c8-8243-5ff3f189f075');
+
+INSERT INTO public.role_permission (role_permission_id, created_at, created_by, status, updated_at, updated_by, permission_id, role_id) VALUES ('78r7d8e9-be3c-4743-87ce-5d7300e9sz89', '2025-05-16 12:03:25.500714', 'AUTO', 'ACTIVE', '2025-05-16 12:03:25.500714', 'AUTO', '648jhge9-be3c-4743-87ce-5d7305cyg165', '5d66cf66-ba76-46c8-8243-5ff3f189f075');
+
+INSERT INTO public.role_permission (role_permission_id, created_at, created_by, status, updated_at, updated_by, permission_id, role_id) VALUES ('sd2ad8e9-be3c-4743-87ce-5d7300e9aerv', '2025-05-16 12:03:25.500714', 'AUTO', 'ACTIVE', '2025-05-16 12:03:25.500714', 'AUTO', 'wea489e9-be3c-4743-87ce-5d7mkl563zdf', '5d66cf66-ba76-46c8-8243-5ff3f189f075');
+
+
+
+======================================================================================================================================================
+Permission Enum
+-------------------------------------------------------------------------------------
+VIEW_LOOKUP,
+ADD_EDIT_LOOKUP,
+DELETE_LOOKUP,
+
+
+
+
+===================================================================================================================================================================
+lookup Model
+=================================================================================================================================================================
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+public class LookupModel {
+    private String lookupId;
+
+    private String parentLookupId;
+
+    private String key;
+
+    private String value;
+
+    private JsonNode langMeta;
+
+    private boolean isEditable;
+
+    private Integer sequenceNumber;
+
+    private List<ChildLookupModel> childLookup;
+}
+
+
+
+========================================================================================================================================================
+Child Lookup Model
+---------------------------------------------------------------------
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class ChildLookupModel implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = -1363869399567636735L;
+
+    @NotNull(groups = Default.class, message = "key is required")
+    private String key;
+
+    @NotNull(groups = Default.class, message = "value is required")
+    private String value;
+
+    private String sequenceNumber;
+
+}
+
+
+*************************************************************************************************************************************************************************************************************
+
+
+
+
+SQL Queries like Join query and alter
+------------------------------------------------------------------------------
+SELECT
+    vs.visit_service_id,
+    s.name AS service_name,
+
+    vp.visit_personnel_id,
+	p.personnel_id,
+	p.first_name,
+	p.last_name,
+	p.phone_number,
+	p.email,
+	r.role_id,
+	r.uucode,
+	r.name AS role_name,
+
+	vs.start_date_time,
+	vs.end_date_time,
+
+	vl.visit_location_id,
+	l.location_id,
+	l.name AS location_name,
+	vl.start_date_time,
+	vl.end_date_time,
+	vl.location_tag,
+
+	vp.visit_personnel_id,
+	p.personnel_id AS interview_volunteer_id,
+	p.first_name AS interview_volunteer_first_name,
+	p.last_name AS interview_volunteer_last_name,
+	p.phone_number AS interview_volunteer_phone,
+	p.email AS interview_volunteer_email,
+	r.role_id AS interview_volunteer_role_id,
+	r.uucode AS interview_volunteer_role_uucode,
+	r.name AS interview_volunteer_role_name
+
+
+FROM visits v
+LEFT JOIN visit_services vs ON v.visit_id = vs.visit_id
+LEFT JOIN services s ON vs.service_id = s.service_id
+
+LEFT JOIN visit_personnel vp ON v.visit_id = vp.visit_id
+LEFT JOIN personnel p ON vp.personnel_id = p.personnel_id
+LEFT JOIN personnel_role pr ON p.personnel_id = pr.personnel_id
+LEFT JOIN roles r ON pr.role_id = r.role_id
+
+LEFT JOIN visit_locations vl ON vs.visit_service_id = vl.visit_service_id
+LEFT JOIN locations l ON vl.location_id = l.location_id
+
+WHERE v.visit_id = '44e5a957-444b-4bcf-ae4e-dae08679e1eb';
+
+
+
+
+
+===============================================================================================================================================
+ALTER TABLE IF EXISTS public.lookup DROP COLUMN IF NOT EXISTS is_editable BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.lookup DROP COLUMN is_editable;
+update public.visits set requested_services = '[
+  "0096a255-72fb-45fa-9c7a-a26a8fe281b6"
+]' where visit_id is not null;
+
+
+
+************************************************************************************************************************************************************************************************************************
+
+personnel controller
+-----------------------------------------------------------------------------------------------------------
+    @Operation(summary = "API end point to add personnel")
+    @PostMapping("/personnel")
+    @PreAuthorize("@authService.hasPermission(T(org.baps.api.vtms.enumerations.PermissionEnum).ADD_PERSONNEL)"
+            + " && @siteService.siteExistsByUUCode(#siteUUCode)")
+    public ResponseEntity<PersonnelFilterModel> addPersonnel(@RequestHeader(
+                                                                     name = GeneralConstant.X_APP_SITE_UUCODE) final String siteUUCode,
+                                                             @Valid @RequestBody final PersonnelFilterModel personnelFilterModel) {
+        final PersonnelFilterModel personnelFilterModelAdd = personnelService.addPersonnel(personnelFilterModel);
+
+        return new ResponseEntity<>(personnelFilterModelAdd, HttpStatus.CREATED);
+    }
+
+    @Operation(summary = "API end point to update personnel")
+    @PutMapping("/personnel/{personnelId}")
+    @PreAuthorize("@authService.hasPermission(T(org.baps.api.vtms.enumerations.PermissionEnum).UPDATE_PERSONNEL)"
+            + " && @siteService.siteExistsByUUCode(#siteUUCode)")
+    public ResponseEntity<PersonnelFilterModel> updatePersonnel(@RequestHeader(
+                                                                        name = GeneralConstant.X_APP_SITE_UUCODE) final String siteUUCode,
+                                                                @PathVariable final String personnelId,
+                                                                @RequestBody final PersonnelFilterModel personnelFilterModel) {
+        final PersonnelFilterModel personnelFilterModelUpdate = personnelService.updatePersonnel(personnelId, personnelFilterModel);
+
+        return new ResponseEntity<>(personnelFilterModelUpdate, HttpStatus.OK);
+    }
+
+    @Operation(summary = "API end point to fetch personnel list by applying filter")
+    @GetMapping("/personnel/search")
+    @PreAuthorize("@authService.hasPermission(T(org.baps.api.vtms.enumerations.PermissionEnum).UPDATE_PERSONNEL)"
+            + "&& @siteService.siteExistsByUUCode(#siteUUCode)")
+    public ResponseEntity<PaginatedResponse<List<PersonnelFilterModel>>> getAllPermission(
+            @RequestHeader(name = GeneralConstant.X_APP_SITE_UUCODE) final String siteUUCode,
+            @RequestParam(required = false) final String filter,
+            @Min(1) @RequestParam(required = false, defaultValue = "1") final int pageNo,
+            @Min(1) @RequestParam(required = false, defaultValue = "10") final int pageSize,
+            @EnumValue(enumClass = Sort.Direction.class)
+            @RequestParam(value = "sortDirection", required = false, defaultValue = "DESC") final String sortDirection,
+            @RequestParam(value = "sortProperty", required = false, defaultValue = "updatedAt") final String sortProperty) {
+
+        return ResponseEntity.ok(personnelService.getAllDetails(filter, pageNo, pageSize, sortDirection, sortProperty));
+    }
+
+
+===========================================================================================================================================================================
+personnel repository
+---------------------------------------------------------------------------------------------------
+    @Query(value = "SELECT distinct p.* "
+            + "FROM personnel p "
+            + "JOIN personnel_role pr ON p.personnel_id = pr.personnel_id "
+            + "JOIN roles r ON pr.role_id = r.role_id "
+            + "WHERE (:filter IS NULL OR LOWER(p.uucode) LIKE LOWER(CONCAT('%', :filter, '%'))) "
+            + "OR (:filter IS NULL OR LOWER(p.center_id) LIKE LOWER(CONCAT('%', :filter, '%'))) "
+            + "OR (:filter IS NULL OR LOWER(p.first_name) LIKE LOWER(CONCAT('%', :filter, '%'))) "
+            + "OR (:filter IS NULL OR LOWER(p.last_name) LIKE LOWER(CONCAT('%', :filter, '%'))) "
+            + "OR (:filter IS NULL OR LOWER(p.email) LIKE LOWER(CONCAT('%', :filter, '%'))) "
+            + "OR (:filter IS NULL OR p.phone_number LIKE CONCAT('%', :filter, '%')) "
+            + "OR (:filter IS NULL OR LOWER(r.name) LIKE LOWER(CONCAT('%', :filter, '%')))", nativeQuery = true)
+    Page<Personnel> findAllPersonnelFilterBy(@Param("filter") String filter, Pageable pageable);
+
+    Optional<Personnel> findByPersonnelId(String personnelId);
+
+    boolean existsByUucode(String uucode);
+
+
+==========================================================================================================================================================================
+personnel service
+-------------------------------------------------------------------------------------------------------------------------
+    public PaginatedResponse<List<PersonnelFilterModel>> getAllDetails(final String filter, final int pageNo, final int pageSize,
+                                                                       final String sortDirectionString, final String sortProperty) {
+
+        if (CommonUtils.isValidProperty(sortProperty, PERSONNEL_SORT_PROPERTIES)) {
+            throw new DataValidationException(translator.toLocal("invalid.sort.property",
+                    PERSONNEL_SORT_PROPERTIES));
+        }
+        final Sort.Direction sortDirection = CommonUtils.getSortDirection(sortDirectionString, translator);
+
+        final Pageable pageable = PageRequest.of(pageNo - 1, pageSize, sortDirection,
+                getPersonnelPropertyMap().get(sortProperty));
+        final Page<Personnel> personnelPage = personnelRepository.findAllPersonnelFilterBy(filter, pageable);
+
+        final List<PersonnelFilterModel> personnelFilterModelList = personnelPage.stream().map(personnel -> {
+            final PersonnelFilterModel personnelFilterModel = personnelMapper.toPersonnelFilterModel(personnel);
+            final List<PersonnelRole> personnelRoles = personnelRoleRepository.findByPersonnelPersonnelId(personnel.getPersonnelId());
+            final List<RoleModelByName> activeRoles = personnelRoles.stream()
+                    .filter(pr -> pr.getStatus().equals(Status.ACTIVE)).map(r -> roleMapper.roleEntityToRoleModelByName(
+                            r.getRole())).toList();
+            personnelFilterModel.setRoles(activeRoles);
+            return personnelFilterModel;
+        }).toList();
+
+        return CommonUtils.calculatePaginationAndPrepareResponse(personnelPage, personnelFilterModelList);
+    }
+
+    @Transactional
+    public PersonnelFilterModel addPersonnel(final PersonnelFilterModel personnelFilterModel) {
+
+        if (personnelRepository.existsByUucode(personnelFilterModel.getUucode())) {
+            throw new DataValidationException("Personnel with UUcode: " + personnelFilterModel.getUucode() + " already exists");
+        }
+
+        Personnel personnel = personnelMapper.toPersonnel(personnelFilterModel);
+        personnel = personnelRepository.save(personnel);
+
+        final List<String> roleIdsFromModel = personnelFilterModel.getRoles().stream().map(r -> r.getRoleId()).toList();
+        final List<Role> rolesInDb = roleRepository.findAllByRoleIdInAndStatus(roleIdsFromModel, Status.ACTIVE);
+        final List<String> roleIdsInDb = rolesInDb.stream().map(r -> r.getRoleId()).toList();
+        final List<String> invalidRoleIds = new ArrayList<>();
+
+        for (String roleIdFromModel : roleIdsFromModel) {
+            if (!roleIdsInDb.contains(roleIdFromModel)) {
+                invalidRoleIds.add(roleIdFromModel);
+            }
+        }
+
+        if (CollectionUtils.isNotEmpty(invalidRoleIds)) {
+            throw new DataNotFoundException("Invalid Role: " + invalidRoleIds);
+        }
+
+        final List<Role> roleToSave = rolesInDb.stream().filter(r -> roleIdsFromModel.contains(r.getRoleId())).toList();
+
+        for (Role role : roleToSave) {
+            final PersonnelRole personnelRole = new PersonnelRole();
+            personnelRole.setPersonnel(personnel);
+            personnelRole.setRole(role);
+            personnelRoleRepository.save(personnelRole);
+        }
+
+        final PersonnelFilterModel personnelToreturn = personnelMapper.toPersonnelFilterModel(personnel);
+        final List<PersonnelRole> byPersonnelRole = personnelRoleRepository.findByPersonnelPersonnelId(personnel.getPersonnelId());
+        final List<RoleModelByName> roleModelByNames = new ArrayList<>();
+        byPersonnelRole.forEach(pr -> roleModelByNames.add(roleMapper.roleEntityToRoleModelByName(pr.getRole())));
+        personnelToreturn.setRoles(roleModelByNames);
+
+        return personnelToreturn;
+    }
+
+    @Transactional
+    public PersonnelFilterModel updatePersonnel(final String personnelId, final PersonnelFilterModel personnelFilterModel) {
+        final Personnel personnel = personnelRepository.findByPersonnelId(personnelId).orElseThrow(
+                () -> new DataNotFoundException("Personnel Not Found!"));
+        personnelMapper.updatePersonnelFromModel(personnelFilterModel, personnel);
+        personnel.setPersonnelId(personnelId);
+        //personnel.setUucode(personnel.getUucode());
+        final Personnel savedPersonnel = personnelRepository.save(personnel);
+
+        final List<RoleModelByName> roleFromModel = personnelFilterModel.getRoles();
+
+        final List<PersonnelRole> existingPersonnelRolesInDB = personnelRoleRepository.findByPersonnelPersonnelId(personnelId);
+        final List<RoleModelByName> roleExistingInPersonnel = existingPersonnelRolesInDB.stream().map(pr -> roleMapper
+                .roleEntityToRoleModelByName(pr.getRole())).toList();
+        final List<String> roleIdsExistingInPersonnel = roleExistingInPersonnel.stream().map(RoleModelByName::getRoleId).toList();
+
+        final List<Role> roleInDb = roleRepository.findAllByRoleIdInAndStatus(roleFromModel.stream().map(r -> r.getRoleId()).toList(),
+                Status.ACTIVE);
+        final List<String> roleIdsInDb = roleInDb.stream().map(r -> r.getRoleId()).toList();
+
+        rectifyRoleStatus(existingPersonnelRolesInDB, roleFromModel);
+
+        final List<String> rolesNotExistingInPersonnel = roleFromModel.stream().map(r -> r.getRoleId()).filter(r ->
+                !roleIdsExistingInPersonnel.contains(r)).toList();
+
+        final List<String> invalidRolesFromModel = new ArrayList<>();
+        if (CollectionUtils.isNotEmpty(rolesNotExistingInPersonnel)) {
+            for (String roleId : rolesNotExistingInPersonnel) {
+                if (!roleIdsInDb.contains(roleId)) {
+                    invalidRolesFromModel.add(roleId);
+                }
+            }
+        }
+        if (CollectionUtils.isNotEmpty(invalidRolesFromModel)) {
+            throw new DataNotFoundException("Invalid Roles: " + invalidRolesFromModel);
+        }
+
+        final List<String> newRoleInModel = rolesNotExistingInPersonnel;
+
+        final List<Role> saveNewRoles = roleInDb.stream().filter(r -> newRoleInModel.contains(r.getRoleId())).toList();
+
+        for (Role roleToInsert : saveNewRoles) {
+            final PersonnelRole personnelRole = new PersonnelRole();
+            personnelRole.setPersonnel(savedPersonnel);
+            personnelRole.setRole(roleToInsert);
+            personnelRoleRepository.save(personnelRole);
+        }
+
+        final PersonnelFilterModel updatePersonnelReturn = personnelMapper.toPersonnelFilterModel(savedPersonnel);
+        final List<PersonnelRole> activePersonnelRoles =
+                personnelRoleRepository.findAllByPersonnelPersonnelIdAndStatus(personnel.getPersonnelId(), Status.ACTIVE);
+        final List<RoleModelByName> roleModelByNames = activePersonnelRoles.stream()
+                .map(pr -> roleMapper.roleEntityToRoleModelByName(pr.getRole())).toList();
+        updatePersonnelReturn.setRoles(roleModelByNames);
+
+        return updatePersonnelReturn;
+    }
+
+    /**
+     * Updates the status of existing personnel roles based on the provided role model.
+     * This method iterates through the list of existing personnel roles and checks if their role IDs
+     * exist in the given role model list.
+     * - If a role exists in the model and is currently inactive, it is activated.
+     * - If a role does not exist in the model and is currently active, it is deactivated.
+     * The updated roles are then saved to the repository.
+     * @param existingPersonnelRoles the list of existing personnel roles in the system
+     * @param roleFromModel the list of roles from the model to compare against
+     */
+    private void rectifyRoleStatus(final List<PersonnelRole> existingPersonnelRoles, final List<RoleModelByName> roleFromModel) {
+        final List<String> roleIdsFromModel = roleFromModel.stream().map(r -> r.getRoleId()).toList();
+        for (PersonnelRole personnelRole : existingPersonnelRoles) {
+            final String existingRoleId = personnelRole.getRole().getRoleId();
+
+            if (roleIdsFromModel.contains(existingRoleId)) {
+                if (personnelRole.getStatus().equals(Status.INACTIVE)) {
+                    personnelRole.setStatus(Status.ACTIVE);
+                    personnelRoleRepository.save(personnelRole);
+                }
+            } else {
+                if (personnelRole.getStatus().equals(Status.ACTIVE)) {
+                    personnelRole.setStatus(Status.INACTIVE);
+                    personnelRoleRepository.save(personnelRole);
+                }
+            }
+        }
+    }
+
+    private Map<String, String> getPersonnelPropertyMap() {
+        final Map<String, String> personnelPropertyMap = new HashMap<>();
+        personnelPropertyMap.put(PersonnelFilterModel.Fields.updatedAt, "updated_at");
+        personnelPropertyMap.put(PersonnelFilterModel.Fields.createdAt, "created_at");
+        personnelPropertyMap.put(PersonnelFilterModel.Fields.firstName, "first_name");
+        personnelPropertyMap.put(PersonnelFilterModel.Fields.lastName, "last_name");
+        return personnelPropertyMap;
+    }
+
+
+
+
+=========================================================================================================================================================================
+personnel filter Model
+-----------------------------------------------------------------------------------------------------------------
+@Data
+@SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+@FieldNameConstants
+public class PersonnelFilterModel {
+
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String personnelId;
+
+    @NotBlank
+    private String uucode;
+
+    @NotBlank
+    private String firstName;
+
+    @NotBlank
+    private String middleName;
+
+    @NotBlank
+    private String lastName;
+
+    @NotBlank
+    private String centerId;
+
+    @NotBlank
+    private String email;
+
+    @NotBlank
+    private String phoneCountryCode;
+
+    @NotBlank
+    private String phoneNumber;
+
+    @NotBlank
+    private String gender;
+
+    @NotEmpty
+    private List<RoleModelByName> roles;
+
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private LocalDateTime createdAt;
+
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private LocalDateTime updatedAt;
+}
+
+
+
+========================================================================================================================================================================
+role Model By Name
+---------------------------------------------------------------------------------------------------
+@ToString
+@Data
+@SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+public class RoleModelByName {
+
+    private String roleId;
+
+    private String name;
+
+}
+
+
+
+==========================================================================================================================================================================
+personnel Mapper
+-----------------------------------------------------------------------------------------------------------
+    @Mapping(target = "personnelRoleList", ignore = true)
+    Personnel toEntity(PersonnelFilterModel personnelFilterModel);
+
+    default List<RoleModelByName> personneltoRole(List<PersonnelRole> personnelRoleList) {
+
+        final List<RoleModelByName> roleList = new ArrayList<>();
+
+        if (CollectionUtils.isNotEmpty(personnelRoleList)) {
+            personnelRoleList.forEach(pr -> {
+                roleList.add(Mappers.getMapper(RoleMapper.class).roleEntityToRoleModelByName(pr.getRole()));
+            });
+        }
+        return roleList;
+    }
+
+    @Mapping(target = "roleIds", expression = "java(personneltoRole(personnel.getPersonnelRoleList()))")
+    List<PersonnelFilterModel> personnelListToPersonnelFilterModelList(List<Personnel> personnel);
+
+    @Mapping(target = "personnelRoleList", ignore = true)
+    Personnel toPersonnel(PersonnelFilterModel personnelFilterModel);
+
+    @Mapping(target = "roles", expression = "java(personneltoRole(personnel.getPersonnelRoleList()))")
+    PersonnelFilterModel toPersonnelFilterModel(Personnel personnel);
+
+    @Mapping(target = "personnelRoleList", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    void updatePersonnelFromModel(PersonnelFilterModel personnelFilterModel, @MappingTarget Personnel personnel);
+
+
+===============================================================================================================================================================
+Personnel Entity
+-----------------------------------------------------------------------------------
+@Getter
+@Setter
+@ToString
+@Entity
+@Table(name = "personnel")
+@SQLDelete(sql = "UPDATE personnel SET status = 'DELETED' WHERE personnel_id=?")
+@Where(clause = "status != 'DELETED'")
+@SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+public class Personnel extends BaseEntity {
+
+    @Serial
+    private static final long serialVersionUID = 5585292109126618605L;
+
+    @Id
+    @GenericGenerator(name = "uuid2", strategy = "uuid2")
+    @GeneratedValue(strategy = GenerationType.IDENTITY, generator = "uuid2")
+    @Column(name = "personnel_id", length = 36)
+    private String personnelId;
+
+    @Column(name = "personnel_uuid", length = 36)
+    private String personnelUUId;
+
+    @Column(name = "uucode", length = 9)
+    private String uucode;
+
+    @Column(name = "external_id")
+    private Integer externalId;
+
+    @Column(name = "first_name", length = 32, nullable = false)
+    private String firstName;
+
+    @Column(name = "middle_name", length = 64)
+    private String middleName;
+
+    @Column(name = "last_name", length = 64)
+    private String lastName;
+
+    @Column(name = "gender", length = 6)
+    private String gender;
+
+    @Column(name = "age_group", length = 10)
+    private String ageGroup;
+
+    @Column(name = "mandal", length = 16)
+    private String mandal;
+
+    @Column(name = "center_id", length = 16)
+    private String centerId;
+
+    @Column(name = "parazone_id", length = 16)
+    private String parazoneId;
+
+    @Column(name = "email", length = 255)
+    private String email;
+
+    @Column(name = "personal_email", length = 255)
+    private String personalEmail;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "email_source", length = 30, columnDefinition = "VARCHAR(30) default 'NONE'", nullable = false)
+    private EmailSourceEnum emailSourceEnum;
+
+    @Column(name = "phone_country_code", length = 3, nullable = false)
+    private String phoneCountryCode;
+
+    @Column(name = "phone_number", length = 12, nullable = false)
+    private String phoneNumber;
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "personnel", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PersonnelRole> personnelRoleList = new ArrayList<>();
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "personnel", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<VisitPersonnel> visitPersonnelList = new ArrayList<>();
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "meetingPersonnel", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<VisitService> meetingVisitPersonnelList = new ArrayList<>();
+
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+
+        if (CollectionUtils.isNotEmpty(this.personnelRoleList)) {
+
+            final List<Permission> permissionList = new ArrayList<>();
+            final var existingRoleList = this.personnelRoleList.stream().map(PersonnelRole::getRole).toList();
+
+            existingRoleList.forEach(role ->
+                    permissionList.addAll(role.getRolePermissionList().stream().map(RolePermission::getPermission)
+                    .toList()));
+
+            return permissionList.stream()
+                    .map(permission -> new SimpleGrantedAuthority(permission.getPermissonEnum().name())).toList();
+        }
+        return Collections.emptyList();
+    }
+
+    @Override
+    public boolean equals(final Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || Hibernate.getClass(this) != Hibernate.getClass(o)) {
+            return false;
+        }
+
+        if (o instanceof Personnel personnel) {
+            return Objects.equals(personnelId, personnel.personnelId);
+        }
+
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
     }
 }
+
+
+
+==========================================================================================================================================================
+role Entity
+----------------------------------------------------------------------------------------
+@Getter
+@Setter
+@ToString
+@Entity
+@Table(name = "roles")
+@SQLDelete(sql = "UPDATE roles SET status = 'DELETED' WHERE role_id=?")
+@Where(clause = "status != 'DELETED'")
+@SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+public class Role extends BaseEntity {
+
+    @Serial
+    private static final long serialVersionUID = -6756561673036787713L;
+
+    @Id
+    @GenericGenerator(name = "uuid2", strategy = "uuid2")
+    @GeneratedValue(strategy = GenerationType.IDENTITY, generator = "uuid2")
+    @Column(name = "role_id", length = 36)
+    private String roleId;
+
+    @Column(name = "uucode", nullable = false, length = 50)
+    private String uucode;
+
+    @Column(name = "name", nullable = false, length = 255)
+    private String name;
+
+    @JdbcTypeCode(value = SqlTypes.JSON)
+    @Column(name = "lang_meta", columnDefinition = "jsonb")
+    private JsonNode langMeta;
+
+    @Column(name = "is_check_availability", nullable = false)
+    private boolean checkAvailability;
+
+    @Column(name = "is_check_system_role", nullable = false)
+    private boolean checkSystemRole;
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "role", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PersonnelRole> personnelRoleList = new ArrayList<>();
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "role", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<RolePermission> rolePermissionList = new ArrayList<>();
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "role", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<RoleTag> roleTagList = new ArrayList<>();
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "role", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<VisitPersonnel> visitPersonnelList = new ArrayList<>();
+
+    @Override
+    public boolean equals(final Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || Hibernate.getClass(this) != Hibernate.getClass(o)) {
+            return false;
+        }
+
+        if (o instanceof Role role) {
+            return Objects.equals(roleId, role.roleId);
+        }
+
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
+}
+
+
+
+
+****************************************************************************************************************************************************************************************************************
+
+==========================================================================================================================================================
+--> This is  Web Client Config
+==========================================================================================================================================================
+    @Bean
+    public WebClient misWebClient(final WebClient.Builder webClientBuilder) {
+        return webClientBuilder
+                .clone()
+                .baseUrl(misClientUrl)
+                .defaultHeaders(httpHeaders -> httpHeaders.addAll(defaultHeaders.get()))
+                .build();
+    }
+
+
+
+==========================================================================================================================================================
+--> This is Mis Web Client Controller
+==========================================================================================================================================================
+@RequiredArgsConstructor
+@RestController
+@RequestMapping("/mis")
+public class MisClientController {
+
+    private final MisClientService misClientService;
+
+    @Operation(summary = "API end point to fetch MIS data by search id, email or phone")
+    @GetMapping("/search")
+    public ResponseEntity<List<MisModel>> getPerson(@RequestParam(value = "personSearchID", required = false) final String searchId,
+                                                    @RequestParam(value = "email", required = false) final String email,
+                                                    @RequestParam(value = "phone", required = false) final String phone) {
+
+        return ResponseEntity.ok(misClientService.getMISPerson(searchId, email, phone));
+
+    }
+}
+
+// @PreAuthorize("@authService.hasPermission(T(org.baps.api.vtms.enumerations.PermissionEnum).VIEW_MIS_PERSON_LIST)"
+//            + " && @siteService.siteExistsByUUCode(#siteUUCode)")
+
+
+
+
+==========================================================================================================================================================
+--> This is  Mis Model
+==========================================================================================================================================================
+@Data
+@SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+public class MisModel {
+
+    private Integer personSearchID;
+
+    private Integer familyId;
+
+    private String firstName;
+
+    private String middleName;
+
+    private String lastName;
+
+    private String gender;
+
+    private String relation;
+
+    private String category;
+
+    private String maritalStatus;
+
+    private String cellPhone;
+
+    private String homePhone;
+
+    private String primaryEmail;
+
+    private String country;
+
+    private Integer regionId;
+
+    private String regionName;
+
+    private Integer centerId;
+
+    private String centerName;
+
+    private Integer zoneId;
+
+    private String zoneName;
+
+    private String addressLine1;
+
+    private String city;
+
+    private String stateProvince;
+
+    private String postalCode;
+
+    private String bapsid;
+
+    private String shelbyid;
+
+    private String spouseName;
+
+    private boolean mfDeletion;
+
+    private String mfDeletionR;
+}
+
+
+
+
+==========================================================================================================================================================
+--> This is Mis Web Client Service
+==========================================================================================================================================================
+@SuppressFBWarnings({"EI_EXPOSE_REP2"})
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class MisClientService {
+    private static final String MIS_CLIENT_KEY_HEADER = "x-baps-auth-app-id";
+    private static final String MIS_CLIENT_SECRET_HEADER = "x-baps-auth-app-secret";
+    private static final String MIS_CLIENT_ENDPOINT = "/Person/Search";
+
+    private final WebClient misWebClient;
+
+    @Value("${mis.client.key}")
+    private String misClientKey;
+
+    @Value("${mis.client.secret}")
+    private String misClientSecret;
+
+    private final Supplier<HttpHeaders> misClientHeader = () -> {
+        final MultiValueMap<String, String> misHeadersMap = new LinkedMultiValueMap<>();
+        misHeadersMap.add(MIS_CLIENT_KEY_HEADER, misClientKey);
+        misHeadersMap.add(MIS_CLIENT_SECRET_HEADER, misClientSecret);
+        return HttpHeaders.readOnlyHttpHeaders(misHeadersMap);
+    };
+
+    public List<MisModel> getMISPerson(final String searchId, final String email, final String phone) {
+
+        if ((searchId == null || searchId.isBlank())
+                && (email == null || email.isBlank())
+                && (phone == null || phone.isBlank())) {
+            throw new DataValidationException("At least one query parameter (searchId, email, or phone) must be provided.");
+        } else {
+            final MultiValueMap<String, String> queryParams = new LinkedMultiValueMap<>();
+            if (searchId != null && !searchId.isBlank()) {
+                queryParams.add("personSearchID", searchId);
+            }
+            if (email != null && !email.isBlank()) {
+                queryParams.add("email", email);
+            }
+            if (phone != null && !phone.isBlank()) {
+                queryParams.add("phone", phone);
+            }
+
+            try {
+                return misWebClient.get()
+                        .uri(uriBuilder -> uriBuilder
+                                .path(MIS_CLIENT_ENDPOINT)
+                                .queryParams(queryParams).build())
+                        .headers(HttpHeaders -> HttpHeaders.addAll(misClientHeader.get()))
+                        .retrieve()
+                        .bodyToFlux(MisModel.class)
+                        .collectList()
+                        .block();
+            } catch (final Exception e) {
+                log.error("Error occurred while fetching MIS person: {}", e.getMessage());
+                throw new DataNotFoundException("Data Not Found");
+            }
+        }
+    }
+
+}
+
+
+
+==========================================================================================================================================================
+--> This is  apllication.yml
+==========================================================================================================================================================
+server:
+  port: 2108
+
+mis:
+  client:
+    url: ${MIS_CLIENT_URL}
+    key: ${MIS_CLIENT_KEY}
+    secret: ${MIS_CLIENT_SECRET}
+
+
+
+==========================================================================================================================================================
+--> This is  apllicatio-local.yml
+==========================================================================================================================================================
+spring.datasource:
+  driver-class-name: org.postgresql.Driver
+  url: jdbc:postgresql://localhost:5432/bmsdb
+  username: postgres
+  password: kim21
+
+spring.jpa:
+  database-platform: org.hibernate.dialect.PostgreSQLDialect
+  hibernate:
+    ddl-auto: update
+  show-sql: true
+  properties:
+    hibernate:
+      format_sql: true
+
+
+mis:
+  client:
+    url: https://api.dev.bapsapps.org/myseva/api/v1/
+    key: BC13DB16-7078-4D95-9352-C090B72DA011
+    secret: 2133CD34-BC8F-49AF-88DF-97FB1478858E
+
+
+
+==========================================================================================================================================================
+--> This is  Permission Enum
+==========================================================================================================================================================
+//    VIEW_MIS_PERSON_LIST
+
+    ADD_PERSONNEL,
+    UPDATE_PERSONNEL,
+    VIEW_PERSONNEL_LIST,
+
+
+
+
+==============================================================================================================================================
+--> This is  SQL Script
+==============================================================================================================================================
+##############################
+permissions Table
+##############################
+INSERT INTO public.permissions (permission_id, created_at, created_by, status, updated_at, updated_by, name) VALUES ('2k10d8e9-be3c-4743-87ce-5d7300e9d53r', '2025-01-13 15:33:35.500774', 'AUTO', 'ACTIVE', '2025-01-13 15:33:35.500774', 'AUTO', 'ADD_PERSONNEL');
+INSERT INTO public.permissions (permission_id, created_at, created_by, status, updated_at, updated_by, name) VALUES ('k544d8e9-be3c-4743-87ce-5d7300e9d894', '2025-01-13 15:33:23.500764', 'AUTO', 'ACTIVE', '2025-01-13 15:33:23.500764', 'AUTO', 'UPDATE_PERSONNEL');
+
+
+INSERT INTO public.permissions (permission_id, created_at, created_by, status, updated_at, updated_by, name) VALUES ('21bk0903-be3c-4743-87ce-5d7300lh4471', '2025-01-25 10:44:21.500764', 'AUTO', 'ACTIVE', '2025-01-25 10:44:21.500764', 'AUTO', 'VIEW_MIS_PERSON_LIST');
+
+
+##############################
+role_permission Table
+##############################
+INSERT INTO public.role_permission (role_permission_id, created_at, created_by, status, updated_at, updated_by, permission_id, role_id) VALUES ('00c2d8e9-be3c-4743-87ce-5d7300e9d65e', '2025-01-13 15:33:35.500774', 'AUTO', 'ACTIVE', '2025-01-13 15:33:35.500774', 'AUTO', '2k10d8e9-be3c-4743-87ce-5d7300e9d53r', '5d66cf66-ba76-46c8-8243-5ff3f189f075');
+INSERT INTO public.role_permission (role_permission_id, created_at, created_by, status, updated_at, updated_by, permission_id, role_id) VALUES ('d341d8e9-be3c-4743-87ce-5d7300e9d28h', '2025-01-13 15:33:23.500764', 'AUTO', 'ACTIVE', '2025-01-13 15:33:23.500764', 'AUTO', 'k544d8e9-be3c-4743-87ce-5d7300e9d894', '5d66cf66-ba76-46c8-8243-5ff3f189f075');
+
+
+INSERT INTO public.role_permission (role_permission_id, created_at, created_by, status, updated_at, updated_by, permission_id, role_id) VALUES ('23lh0125-be3c-4743-87ce-5d735414sf25', '2025-01-25 11:17:55.500764', 'AUTO', 'ACTIVE', '2025-01-25 11:17:55.500764', 'AUTO', '21bk0903-be3c-4743-87ce-5d7300lh4471', '5d66cf66-ba76-46c8-8243-5ff3f189f075');
